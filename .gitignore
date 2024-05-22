@@ -1,0 +1,10 @@
+llms/models/
+.idea
+.env
+__pycache__/
+*.log
+upload/
+*.DS_Store
+models/
+wandb/
+
