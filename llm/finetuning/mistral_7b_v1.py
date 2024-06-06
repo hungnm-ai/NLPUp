@@ -1,56 +1,29 @@
-from datasets import load_dataset
 from dataclasses import dataclass, field
 from typing import Optional
-from transformers import AutoTokenizer, AutoModelForCausalLM, PreTrainedTokenizer, PreTrainedModel
+
 import torch
-from transformers import BitsAndBytesConfig
-from peft import prepare_model_for_kbit_training
-from peft import LoraConfig, get_peft_model
+from datasets import load_dataset
+from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    BitsAndBytesConfig,
+    PreTrainedModel,
+    PreTrainedTokenizer,
+)
 
 
 @dataclass
 class ModelArguments:
-    model_name_or_path: str = field(
-        metadata={
-            "help": "Model name of path to pre-trained model"
-        }
-    )
-    tokenizer_name: Optional[str] = field(
-        default=None,
-        metadata={
-            "help": "Pretrained tokenizer name"
-        }
-    )
-    padding_side: Optional[str] = field(
-        default="left",
-        metadata={
-            "help": "Padding side is left or right"
-        }
-    )
-    model_max_length: Optional[int] = field(
-        default=4096,
-        metadata={
-            "help": "Model max length"
-        }
-    )
+    model_name_or_path: str = field(metadata={"help": "Model name of path to pre-trained model"})
+    tokenizer_name: Optional[str] = field(default=None, metadata={"help": "Pretrained tokenizer name"})
+    padding_side: Optional[str] = field(default="left", metadata={"help": "Padding side is left or right"})
+    model_max_length: Optional[int] = field(default=4096, metadata={"help": "Model max length"})
 
-    lora: Optional[bool] = field(
-        default=False,
-        metadata={
-            "help": "Where do you want LORA to training model"
-        }
-    )
-    qlora: Optional[bool] = field(
-        default=False,
-        metadata={
-            "help": "Where do you want QLoRA to training model"
-        }
-    )
+    lora: Optional[bool] = field(default=False, metadata={"help": "Where do you want LORA to training model"})
+    qlora: Optional[bool] = field(default=False, metadata={"help": "Where do you want QLoRA to training model"})
     flash_attention: Optional[bool] = field(
-        default=False,
-        metadata={
-            "help": "Where do you want Flash Attention to training model"
-        }
+        default=False, metadata={"help": "Where do you want Flash Attention to training model"}
     )
 
     def __post_init__(self):
@@ -90,24 +63,24 @@ def print_trainable_parameters(_model: PreTrainedModel):
     print(
         f"Trainable params: {trainable_params} || "
         f"all params: {all_params} || "
-        f"trainable%: {round(100 * trainable_params / all_params, 2)}")
+        f"trainable%: {round(100 * trainable_params / all_params, 2)}"
+    )
 
 
 def load_tokenizer(model_args: ModelArguments):
-    _tokenizer = AutoTokenizer.from_pretrained(model_args.model_name_or_path,
-                                               padding_side=model_args.padding_side,
-                                               use_fast=True,
-                                               legacy=True,
-                                               model_max_length=model_args.model_max_length,
-                                               truncation=True,
-                                               truncation_side="left")
+    _tokenizer = AutoTokenizer.from_pretrained(
+        model_args.model_name_or_path,
+        padding_side=model_args.padding_side,
+        use_fast=True,
+        legacy=True,
+        model_max_length=model_args.model_max_length,
+        truncation=True,
+        truncation_side="left",
+    )
     _tokenizer.pad_token = _tokenizer.eos_token
 
 
-def load_model(
-        model_args: ModelArguments,
-        tokenizer: PreTrainedTokenizer
-) -> PreTrainedModel:
+def load_model(model_args: ModelArguments, tokenizer: PreTrainedTokenizer) -> PreTrainedModel:
     """
     Load and configure model. Support fine-tuning full weights or LORA, QLoRA
     Args:
@@ -132,7 +105,7 @@ def load_model(
 
         major_version, minor_version = torch.cuda.get_device_capability()
         if major_version >= 8:
-            attn_implementation = 'flash_attention_2'
+            attn_implementation = "flash_attention_2"
             print("Your device supports Flash Attention 2")
 
     quantization_config = None
@@ -141,7 +114,7 @@ def load_model(
             load_in_4bit=True,
             bnb_4bit_quant_type="nf4",
             bnb_4bit_use_double_quant=True,
-            bnb_4bit_compute_dtype=compute_type
+            bnb_4bit_compute_dtype=compute_type,
         )
 
     # Load pre-trained model
@@ -151,7 +124,7 @@ def load_model(
         torch_dtype=compute_type,
         quantization_config=quantization_config,
         attn_implementation=attn_implementation,
-        trust_remote_code=True
+        trust_remote_code=True,
     )
 
     # resize token embedding if adding special tokens
@@ -168,12 +141,7 @@ def load_model(
     # LoRA config based on Sebastian Raschka experiment
     if model_args.lora:
         peft_config = LoraConfig(
-            r=256,
-            lora_alpha=128,
-            target_modules="all_linear",
-            lora_dropout=0.05,
-            bias="none",
-            task_type="CAUSAL_LM"
+            r=256, lora_alpha=128, target_modules="all_linear", lora_dropout=0.05, bias="none", task_type="CAUSAL_LM"
         )
 
         _model = get_peft_model(model=_model, peft_config=peft_config)
