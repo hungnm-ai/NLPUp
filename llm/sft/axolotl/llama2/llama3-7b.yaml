@@ -1,0 +1,208 @@
+#Enter here the id of the model you want to fine-tune. It can be an HF repository or a local path.
+base_model: meta-llama/Meta-Llama-3-8B
+model_type: AutoModelForCausalLM
+tokenizer_type: AutoTokenizer
+
+# Trust remote code for untrusted source
+trust_remote_code: true
+
+# use_fast option for tokenizer loading from_pretrained, default to True
+tokenizer_use_fast: true
+
+# Whether to use the legacy tokenizer setting, defaults to True
+tokenizer_legacy: true
+
+# Used to identify which the model is based on
+is_llama_derived_model: true
+
+
+#The configuration settings for the bitsandbytes configuration used for QLoRA. If you don't use QLoRA, you don't need to write these settings.
+bnb_config_kwargs:
+  llm_int8_has_fp16_weight: false
+  bnb_4bit_quant_type: nf4
+  bnb_4bit_use_double_quant: true
+
+#Set the loading of the model in 4-bit. It can't be set in the bnb_config_kwargs (I tried...) but I suspect it will be in the future since HF Transformers is deprecating "load_in_4bit"
+load_in_4bit: true
+load_in_8bit: false
+strict: false
+
+
+# Use CUDA bf16
+bf16: auto # bool or 'full' for `bf16_full_eval`. require >=ampere
+fp16: # leave empty to use fp16 when bf16 is 'auto'. set to false if you want to fallback to fp32
+tf32: true # require >=ampere
+
+# No AMP (automatic mixed precision)
+#bfloat16: true # require >=ampere
+#float16: false
+
+#Define here your training dataset. For a chat dataset, be aware that Axolotl doesn't support many format. The original format of Hugging Face's Ultrachat 200k is not supported. I had to use a version converted to the ShareGPT format.
+datasets:
+  - path: PhilipMay/UltraChat-200k-ShareGPT-clean
+    split: train
+    type: sharegpt
+    conversation: chatml
+
+#For the evaluation dataset, I use the test split from the same dataset used for training
+test_datasets:
+  - path: PhilipMay/UltraChat-200k-ShareGPT-clean
+    split: test
+    type: sharegpt
+    conversation: chatml
+
+#For the chat template, I use chatml.
+chat_template: chatml
+#Where to save the fine-tuned adapter
+output_dir: ./ultrachat-200k-sharegpt
+
+
+#The maximum sequence length. By default, Axolotl will remove all the sequences longer than this value from the training and evaluation data.
+sequence_len: 2048
+# Pad inputs so each step uses constant sized buffers
+# This will reduce memory fragmentation and may prevent OOMs, by re-using memory more efficiently
+pad_to_sequence_len: true
+# Use efficient multi-packing with block diagonal attention and per sequence position_ids. Recommend set to 'true'
+sample_packing: true
+# Set to 'false' if getting errors during eval with sample_packing on.
+eval_sample_packing: false
+
+
+# If you want to use 'lora' or 'qlora' or leave blank to train all parameters in original model
+adapter: lora
+
+
+
+#The LoRA configuration
+lora_r: 16
+lora_alpha: 16
+lora_dropout: 0.05
+lora_target_modules:
+  - q_proj
+  - v_proj
+  - k_proj
+  - o_proj
+  - gate_proj
+  - down_proj
+  - up_proj
+
+#To directly target all the modules targeted above we could just set the following instead:
+#lora_target_linear: true
+
+
+# If you added new tokens to the tokenizer, you may need to save some LoRA modules because they need to know the new tokens.
+# For LLaMA and Mistral, you need to save `embed_tokens` and `lm_head`. It may vary for other models.
+# `embed_tokens` converts tokens to embeddings, and `lm_head` converts embeddings to token probabilities.
+# https://github.com/huggingface/peft/issues/334#issuecomment-1561727994
+
+#lora_modules_to_save:
+#  - embed_tokens
+#  - lm_head
+
+
+# LoRA+ hyperparameters
+# For more details about the following options, see:
+# https://arxiv.org/abs/2402.12354  and `src/axolotl/core/train_builder.py`
+#loraplus_lr_ratio: # loraplus learning rate ratio lr_B / lr_A. Recommended value is 2^4.
+#loraplus_lr_embedding: #  loraplus learning rate for lora embedding layers. Default value is 1e-6.
+
+
+# wandb configuration if you're using it
+# Make sure your `WANDB_API_KEY` environment variable is set (recommended) or you login to wandb with `wandb login`.
+wandb_mode: # "offline" to save run metadata locally and not sync to the server, "disabled" to turn off wandb
+wandb_project: axolotl
+wandb_entity: # A wandb Team name if using a Team
+wandb_watch:
+wandb_name: # Set the name of your wandb run
+wandb_run_id: # Set the ID of your wandb run
+wandb_log_model: # "checkpoint" to log model to wandb Artifacts every `save_steps` or "end" to log only at the end of training
+
+
+
+#Training arguments
+num_epochs: 2
+
+gradient_accumulation_steps: 4
+# The number of samples to include in each batch. This is the number of samples sent to each GPU.
+# Batch size per gpu = micro_batch_size * gradient_accumulation_steps
+micro_batch_size: 8
+eval_batch_size: 8
+learning_rate: 0.00003
+logging_steps: 10
+eval_steps: # Leave empty to eval at each epoch, integers for every N steps. decimal for fraction of total steps
+evals_per_epoch: # number of times per epoch to run evals, mutually exclusive with eval_steps
+save_strategy: epoch
+save_steps: # Leave empty to save at each epoch
+
+
+# Save model as safetensors (require safetensors package)
+save_safetensors: true
+
+# Whether to mask out or include the human's prompt from the training labels
+train_on_inputs: false
+# Group similarly sized data to minimize padding.
+# May be slower to start, as it must download and sort the entire dataset.
+# Note that training loss may have an oscillating pattern with this enabled.
+group_by_length: false
+
+
+#Use gradient checkpointing to save up to 70% of memory.
+gradient_checkpointing: true
+gradient_checkpointing_kwargs:
+   use_reentrant: true
+
+# Specify a scheduler and kwargs to use with the optimizer
+lr_scheduler: linear
+warmup_ratio: 0.1
+
+
+# Specify optimizer
+# Valid values are driven by the Transformers OptimizerNames class, see:
+# https://github.com/huggingface/transformers/blob/95b374952dc27d8511541d6f5a4e22c9ec11fb24/src/transformers/training_args.py#L134
+#
+# Note that not all optimizers may be available in your environment, ex: 'adamw_anyprecision' is part of
+# torchdistx, 'adamw_bnb_8bit' is part of bnb.optim.Adam8bit, etc. When in doubt, it is recommended to start with the optimizer used
+# in the examples/ for your model and fine-tuning use case.
+#
+# Valid values for 'optimizer' include:
+# - adamw_hf
+# - adamw_torch
+# - adamw_torch_fused
+# - adamw_torch_xla
+# - adamw_apex_fused
+# - adafactor
+# - adamw_anyprecision
+# - sgd
+# - adagrad
+# - adamw_bnb_8bit
+# - lion_8bit
+# - lion_32bit
+# - paged_adamw_32bit
+# - paged_adamw_8bit
+# - paged_lion_32bit
+# - paged_lion_8bit
+# - galore_adamw
+# - galore_adamw_8bit
+# - galore_adafactor
+# - galore_adamw_layerwise
+# - galore_adamw_8bit_layerwise
+# - galore_adafactor_layerwise
+optimizer: paged_adamw_32bit
+
+# Specify weight decay
+
+weight_decay: 0.0
+
+
+#Activate FlashAttention for faster and memory-efficient processing of long training examples
+flash_attention: true
+
+# Deepspeed config path. e.g., deepspeed_configs/zero3.json
+#deepspeed:
+
+# Seed
+seed: 99
+
+#The special token used for padding Llama 3
+special_tokens:
+  pad_token: <|eot_id|>
