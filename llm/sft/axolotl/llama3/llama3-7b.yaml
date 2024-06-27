@@ -58,7 +58,7 @@ output_dir: ./ultrachat-200k-sharegpt
 
 
 #The maximum sequence length. By default, Axolotl will remove all the sequences longer than this value from the training and evaluation data.
-sequence_len: 2048
+sequence_len: 1024
 # Pad inputs so each step uses constant sized buffers
 # This will reduce memory fragmentation and may prevent OOMs, by re-using memory more efficiently
 pad_to_sequence_len: true
@@ -125,8 +125,8 @@ num_epochs: 2
 gradient_accumulation_steps: 4
 # The number of samples to include in each batch. This is the number of samples sent to each GPU.
 # Batch size per gpu = micro_batch_size * gradient_accumulation_steps
-micro_batch_size: 8
-eval_batch_size: 8
+micro_batch_size: 4
+eval_batch_size: 4
 learning_rate: 0.00003
 logging_steps: 10
 eval_steps: # Leave empty to eval at each epoch, integers for every N steps. decimal for fraction of total steps
